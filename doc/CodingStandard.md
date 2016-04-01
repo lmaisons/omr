@@ -785,6 +785,60 @@ public:
 }
 ```
 
+### Forward declarations
+* When forward declaring types, use the same class-key (struct, class, union) that is used in the type definition.
+ 
+Given
+```cpp
+struct MyStructType {
+};
+
+class MyClassType {
+};
+
+union MyUnionType {
+};
+```
+Correct
+```cpp
+struct MyStructType;
+```
+Wrong
+```cpp
+class MyStructType;
+```
+Wrong
+```cpp
+union MyStructType;
+```
+Correct
+```cpp
+class MyClassType;
+```
+Wrong
+```cpp
+struct MyClassType;
+```
+Wrong
+```cpp
+union MyClassType;
+```
+Correct
+```cpp
+union MyUnionType;
+```
+Wrong
+```cpp
+struct MyUnionType;
+```
+Wrong
+```cpp
+class MyUnionType;
+```
+
+#### Rationale
+Some compilers (most notably the Microsoft Visual C++ family) encorporate the declared class-key of a type into the mangled names of symbols.  A mismatch between the class-key used in a forward-declararation and the class-key used in the type definition results in hard to diagnose link errors.
+
 ### Whitespace
 * Include spaces on both sides of most operators.
 * Include spaces between keywords and parenthesized lists or conditions.
