@@ -1372,29 +1372,31 @@ void OMR::CFG::findLoopingBlocks(TR::BitVector &loopingBlocks)
    {
    int32_t numberOfBlocks = getNextNodeNumber();
    TR::deque<int32_t> seenIndex(numberOfBlocks, comp()->allocator());
-   CS2::ArrayOf<TR::Block *, TR::Allocator> stack(256, comp()->allocator());
+   TR::deque<TR::Block *> stack(comp()->allocator());
    CS2::TableOf<LoopInfo, TR::Allocator> loops(8, comp()->allocator());
    int32_t i, j;
    const bool trace = false;
    vcount_t blockVisitCount = comp()->incVisitCount();
-   TR::Block * block = toBlock(getStart()->getSuccessors().front()->getTo());
-   for ( ; block; block = block->getNextBlock())
+   for(
+      TR::Block * block = toBlock(getStart()->getSuccessors().front()->getTo());
+      block;
+      block = block->getNextBlock()
+      )
       {
       // Make sure every block gets looked at
       if (block->getVisitCount() == blockVisitCount)
        continue;
 
       int32_t lowestLoop = 0; // lowest loop in the table of loops
-      int32_t top = 0;
-      stack[top] = block;
+      stack.push_back(block);
       for (i = numberOfBlocks-1; i >= 0; i--)
          seenIndex[i] = -1;
-      while (top >= 0)
+      while (!stack.empty())
          {
-       // Get the top block but don't pop it from the stack yet,
-       // in case it has predecessors which have to be pushed on top of it
-       int32_t index = top;
-         TR::Block * b = stack[top];
+         // Get the top block but don't pop it from the stack yet,
+         // in case it has predecessors which have to be pushed on top of it
+         int32_t index = stack.size() - 1;
+         TR::Block * b = stack.back();
          b->setVisitCount(blockVisitCount);
          int32_t number = b->getNumber();
          if (trace)
@@ -1480,11 +1482,11 @@ void OMR::CFG::findLoopingBlocks(TR::BitVector &loopingBlocks)
                // This predecessor has not been looked at - push it
                if (trace)
                   dumpOptDetails(comp(), "Push predecessor %d\n", fromBlock->getNumber());
-               stack[++top] = fromBlock;
+               stack.push_back(fromBlock);
                break;
                }
             }
-         if (top == index)
+         if (stack.size() == index + 1)
             {
             // Nothing pushed, process this block - see if it is in a loop
             do
@@ -1521,7 +1523,7 @@ void OMR::CFG::findLoopingBlocks(TR::BitVector &loopingBlocks)
                   }
                } while (i > 0);
             seenIndex[number] = -1;
-            top--;
+            stack.pop_back();
             }
          }
       }
