@@ -107,7 +107,11 @@ void TR_UseDefInfo::prepareUseDefInfo(bool requiresGlobals, bool prefersGlobals,
    comp()->printMemStatsBefore("prepareUseDefInfo");
    LexicalTimer tlex("useDefInfo", comp()->phaseTimer());
 
-   TR_UseDefInfo::AuxiliaryData aux(comp());
+   TR_UseDefInfo::AuxiliaryData aux(
+      comp()->getSymRefCount(),
+      comp()->getNodeCount(),
+      comp()->allocator("UseDefAux")
+      );
 
    // *this    swipeable for debugging purposes
    int32_t i;
@@ -137,7 +141,6 @@ void TR_UseDefInfo::prepareUseDefInfo(bool requiresGlobals, bool prefersGlobals,
    aux._nodeSideTableToSymRefNumMap.GrowTo(comp()->getNodeCount());
 
    aux._neverReadSymbols.GrowTo(numSymRefs);
-   aux._onceReadSymbols.GrowTo(numSymRefs);
    aux._onceReadSymbolsIndices.GrowTo(numSymRefs);
    if (_hasLoadsAsDefs &&
        !cannotOmitTrivialDefs &&
