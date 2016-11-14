@@ -138,7 +138,6 @@ void TR_UseDefInfo::prepareUseDefInfo(bool requiresGlobals, bool prefersGlobals,
    aux._numAliases.GrowTo(numSymRefs);
 
    _sideTableToSymRefNumMap.GrowTo(numSymRefs);
-   aux._nodeSideTableToSymRefNumMap.GrowTo(comp()->getNodeCount());
 
    aux._neverReadSymbols.GrowTo(numSymRefs);
    if (_hasLoadsAsDefs &&
@@ -1781,8 +1780,6 @@ void TR_UseDefInfo::insertData(TR::Block *block, TR::Node *node,TR::Node *parent
             if (aux._expandedAtoms[k].getKey() == NULL)
                aux._expandedAtoms[k] = CS2::Pair<TR::Node *, TR::TreeTop *>(node, treeTop);
             }
-
-         aux._nodeSideTableToSymRefNumMap[k] = aliasedSymRef->getReferenceNumber();
 
          if (trace())
             traceMsg(comp(), "    symbol (u/d index=%d) is defined by node with localIndex %d \n",j, k);
