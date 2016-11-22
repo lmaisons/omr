@@ -259,8 +259,6 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
 
    virtual bool matchesTargetRegister(TR::Register* reg);
 
-   bool     sourceRegUsedInMemoryReference(uint32_t i);
-
    void addComment(char *) { }
    void      setBreakPoint(bool v) {v ? _index |= BreakPoint : _index &= ~BreakPoint;}
 
@@ -390,34 +388,8 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
             }
       };
 
-   class RegisterBitVector : public TR::Allocatable<RegisterBitVector, TR::Allocator>
-      {
-      public:
-         TR::Allocator allocator() { return TR::comp()->allocator(); }
-
-      private:
-         CS2::ASparseBitVector< TR::Allocator > _impl;
-
-      public:
-         explicit RegisterBitVector(TR::Compilation * c) :
-            _impl(c->allocator())
-            {
-            }
-
-         void set(size_t i)
-            {
-            _impl[i] = true;
-            }
-
-         bool isSet(size_t i)
-            {
-            return _impl.ValueAt(i);
-            }
-      };
-
    RegisterArray<TR::Register*> * _useRegs;
    RegisterArray<TR::Register*> * _defRegs;
-   RegisterBitVector * _sourceUsedInMemoryReference;
 
    // Long Disp Information
    TR::RealRegister * _longDispSpillReg1;

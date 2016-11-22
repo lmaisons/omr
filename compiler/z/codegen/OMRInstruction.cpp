@@ -74,7 +74,7 @@
 #include "env/TRMemory.hpp"
 
 #define CTOR_INITIALIZER_LIST   _conditions(NULL), _operands(NULL),  _useRegs(NULL), _defRegs(NULL), \
-	   _sourceUsedInMemoryReference(NULL), _flags(0), _longDispSpillReg1(NULL), _longDispSpillReg2(NULL), _binFreeRegs(0), \
+   _flags(0), _longDispSpillReg1(NULL), _longDispSpillReg2(NULL), _binFreeRegs(0), \
    _targetRegSize(0), _sourceRegSize(0), _sourceMemSize(0), _targetMemSize(0), _sourceStart(-1), _targetStart(-1)
 
 OMR::Z::Instruction::Instruction(TR::CodeGenerator *cg,
@@ -2909,22 +2909,11 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
    uint32_t indexSource=0, indexTarget=0,i;
    TR::RegisterPair * regPair;
    TR::RegisterDependencyConditions * dependencies = self()->getDependencyConditions();
-   if (self()->cg()->getCodeGeneratorPhase() == TR::CodeGenPhase::PeepholePhase)
-      {
-      //In Peephole Phase, UseDefRegisters need to reset. The check on non Peephole Phase needs to be avoided here.
-      if ((_useRegs != NULL && _useRegs->size() != 0) || (_defRegs != NULL && _defRegs->size() != 0))
-         {}
-      else
-         _sourceUsedInMemoryReference = new (self()->cg()->comp()->allocator()) RegisterBitVector(self()->cg()->comp());
-      //allocate arrays
-      }
-   else
+   if (self()->cg()->getCodeGeneratorPhase() != TR::CodeGenPhase::PeepholePhase)
       {
       TR_ASSERT(  ((_useRegs == NULL || _useRegs->size() == 0) || (_defRegs == NULL || _defRegs->size() == 0)), "source&target registers have already been set\n" );
       if ((_useRegs != NULL && _useRegs->size() != 0) || (_defRegs != NULL && _defRegs->size() != 0))
          return;
-      _sourceUsedInMemoryReference = new (self()->cg()->comp()->allocator()) RegisterBitVector(self()->cg()->comp());
-      //allocate arrays
       }
 
    // The check for isStore() || isCompare() || isTrap() should not hurt but should unnecessary as each instruction
@@ -3087,12 +3076,10 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
          {
          if (_sourceMem[i]->getBaseRegister()!=NULL)
             {
-            _sourceUsedInMemoryReference->set(indexSource);
             (*_useRegs)[indexSource++]=_sourceMem[i]->getBaseRegister();
             }
          if (_sourceMem[i]->getIndexRegister()!=NULL)
             {
-            _sourceUsedInMemoryReference->set(indexSource);
             (*_useRegs)[indexSource++]=_sourceMem[i]->getIndexRegister();
             }
          }
@@ -3104,12 +3091,10 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
          {
          if (_targetMem[i]->getBaseRegister()!=NULL)
             {
-            _sourceUsedInMemoryReference->set(indexSource);
             (*_useRegs)[indexSource++]=_targetMem[i]->getBaseRegister();
             }
          if (_targetMem[i]->getIndexRegister()!=NULL)
             {
-            _sourceUsedInMemoryReference->set(indexSource);
             (*_useRegs)[indexSource++]=_targetMem[i]->getIndexRegister();
             }
          }
@@ -3213,12 +3198,6 @@ OMR::Z::Instruction::getTargetRegister(uint32_t i)
 //   {
 //   return NULL;
 //   }
-
-bool
-OMR::Z::Instruction::sourceRegUsedInMemoryReference(uint32_t i)
-   {
-   return _sourceUsedInMemoryReference->isSet(i);
-   }
 
 // Local-local allocation interface
 //  Used to grab regs at genBin time.
