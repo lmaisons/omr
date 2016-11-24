@@ -38,11 +38,11 @@ namespace OMR { typedef OMR::Z::Instruction InstructionConnector; }
 #include "codegen/Register.hpp"                        // for Register
 #include "codegen/RegisterConstants.hpp"
 #include "compile/Compilation.hpp"                     // for Compilation, etc
-#include "cs2/arrayof.h"                               // for ArrayOf
 #include "cs2/hashtab.h"                               // for HashTable, etc
 #include "cs2/sparsrbit.h"
 #include "env/TRMemory.hpp"                            // for Allocator, etc
 #include "infra/Assert.hpp"                            // for TR_ASSERT
+#include "infra/deque.hpp"
 #include "infra/Flags.hpp"                             // for flags16_t
 
 class TR_Debug;
@@ -348,48 +348,8 @@ class OMR_EXTENSIBLE Instruction : public OMR::Instruction
    TR::MemoryReference** targetMemBase()
       { return (_targetMemSize!=0) ? ((TR::MemoryReference**)_operands)+_targetRegSize+_sourceRegSize+_sourceMemSize : NULL;  }
 
-   template <typename T>
-   class RegisterArray : public TR::Allocatable<RegisterArray<T>, TR::Allocator>
-      {
-      public:
-         TR::Allocator allocator() { return TR::comp()->allocator(); }
-
-      private:
-         // template <class AElementType, class Allocator = CS2::allocator, size_t segmentBits = 8>
-         typename CS2::ArrayOf< T, TR::Allocator, 3 > _impl;
-
-      public:
-         explicit RegisterArray(TR::Compilation * c) :
-            _impl(c->allocator())
-            {
-            }
-
-         T & operator[](size_t i)
-            {
-            return _impl[i];
-            }
-
-         size_t size()
-            {
-            size_t n = 0;
-            for (size_t i = 0; i < _impl.NumberOfElements(); i++)
-               {
-               if (_impl[i] != NULL)
-                  {
-                  n += 1;
-                  }
-               }
-            return n;
-            }
-
-         void MakeEmpty()
-            {
-            _impl.MakeEmpty();
-            }
-      };
-
-   RegisterArray<TR::Register*> * _useRegs;
-   RegisterArray<TR::Register*> * _defRegs;
+   TR::deque<TR::Register *> * _useRegs;
+   TR::deque<TR::Register *> * _defRegs;
 
    // Long Disp Information
    TR::RealRegister * _longDispSpillReg1;

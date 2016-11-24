@@ -519,9 +519,9 @@ OMR::Z::Instruction::isDefRegister(TR::Register * reg)
    //Test explicitly targeted register by the instruction
    if (_defRegs)
       {
-      for (int32_t i = 0; i < _defRegs->size(); ++i)
+      for (auto it = _defRegs->begin(); it != _defRegs->end(); ++it)
          {
-         if ((* _defRegs) [i]->usesRegister(reg))
+         if ((*it)->usesRegister(reg))
             return true;
          }
       }
@@ -2878,11 +2878,11 @@ void OMR::Z::Instruction::resetUseDefRegisters()
    {
    if (_useRegs != NULL)
       {
-      _useRegs->MakeEmpty();
+      _useRegs->clear();
       }
    if (_defRegs != NULL)
       {
-      _defRegs->MakeEmpty();
+      _defRegs->clear();
       }
    }
 
@@ -2906,7 +2906,7 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
    TR::MemoryReference **_sourceMem = self()->sourceMemBase();
    TR::MemoryReference **_targetMem = self()->targetMemBase();
 
-   uint32_t indexSource=0, indexTarget=0,i;
+   uint32_t i;
    TR::RegisterPair * regPair;
    TR::RegisterDependencyConditions * dependencies = self()->getDependencyConditions();
    if (self()->cg()->getCodeGeneratorPhase() != TR::CodeGenPhase::PeepholePhase)
@@ -2924,7 +2924,7 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
       {
       if (_useRegs == NULL)
          {
-         _useRegs = new (self()->cg()->comp()->allocator()) RegisterArray<TR::Register *>(self()->cg()->comp());
+         _useRegs = new (self()->cg()->comp()->allocator()) TR::deque<TR::Register *>(self()->cg()->comp()->allocator());
          }
       }
    if ((self()->implicitlySetsGPR0() || self()->implicitlySetsGPR1() || self()->implicitlySetsGPR2()) ||
@@ -2932,7 +2932,7 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
       {
       if (_defRegs == NULL)
          {
-         _defRegs = new (self()->cg()->comp()->allocator()) RegisterArray<TR::Register *>(self()->cg()->comp());
+         _defRegs = new (self()->cg()->comp()->allocator()) TR::deque<TR::Register *>(self()->cg()->comp()->allocator());
          }
       }
 
@@ -2946,8 +2946,8 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
          regPair = (_sourceReg[i])->getRegisterPair();
          if (regPair != NULL)
             {
-            (*_useRegs)[indexSource++] = regPair->getHighOrder();
-            (*_useRegs)[indexSource++] = regPair->getLowOrder();
+            _useRegs->push_back(regPair->getHighOrder());
+            _useRegs->push_back(regPair->getLowOrder());
             // register pair and both registers have been recorded
             // for load/store multiple
             }
@@ -2958,20 +2958,20 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
             // (rather than handing a specific op-code)
             if ((self()->getOpCodeValue() == TR::InstOpCode::CPSDR) && (i == 1))
                {
-               (*_defRegs)[indexTarget++] = _sourceReg[i];
+               _defRegs->push_back(_sourceReg[i]);
                }
             else if (self()->getOpCodeValue() == TR::InstOpCode::EDMK)
                {
-               (*_useRegs)[indexSource++] = _sourceReg[i];
+               _useRegs->push_back(_sourceReg[i]);
                }
             else if (self()->getOpCodeValue() != TR::InstOpCode::LM && self()->getOpCodeValue() != TR::InstOpCode::LMG && self()->getOpCodeValue() != TR::InstOpCode::LMH &&
                 self()->getOpCodeValue() != TR::InstOpCode::LAM && self()->getOpCodeValue() != TR::InstOpCode::LMY)
                {
-               (*_useRegs)[indexSource++] = _sourceReg[i];
+               _useRegs->push_back(_sourceReg[i]);
                }
             else
                {
-               (*_defRegs)[indexTarget++] = _sourceReg[i];
+               _defRegs->push_back(_sourceReg[i]);
                }
             }
          }
@@ -2986,13 +2986,13 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
             // if it's a store or compare instruction, put all regs in _useRegs
             if (self()->isStore() || self()->isCompare() || self()->isTrap() || self()->getOpCode().usesTarget())
                {
-               (*_useRegs)[indexSource++] = regPair->getHighOrder();
-               (*_useRegs)[indexSource++] = regPair->getLowOrder();
+               _useRegs->push_back(regPair->getHighOrder());
+               _useRegs->push_back(regPair->getLowOrder());
                }
             if ((!self()->isStore() && !self()->getOpCode().setsCompareFlag()) || self()->isLoad())
                {
-               (*_defRegs)[indexTarget++] = regPair->getHighOrder();
-               (*_defRegs)[indexTarget++] = regPair->getLowOrder();
+               _defRegs->push_back(regPair->getHighOrder());
+               _defRegs->push_back(regPair->getLowOrder());
                }
             }
          else
@@ -3000,11 +3000,11 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
             // if it's a store or compare instruction, put all regs in _useRegs
             if ((self()->isStore()  || self()->isCompare() || self()->isTrap() || self()->getOpCode().usesTarget() || (self()->getOpCodeValue() == TR::InstOpCode::CPSDR)) && (self()->getOpCodeValue() != TR::InstOpCode::EDMK) && (self()->getOpCodeValue() != TR::InstOpCode::TRTR))
                {
-               (*_useRegs)[indexSource++] = _targetReg[i];
+               _useRegs->push_back(_targetReg[i]);
                }
             if ((!self()->isStore() && !self()->isCompare() && !self()->isTrap() && (self()->getOpCodeValue() != TR::InstOpCode::CPSDR) && (self()->getOpCodeValue() != TR::InstOpCode::PPA)) || self()->isLoad() || (self()->getOpCodeValue() == TR::InstOpCode::EDMK) || (self()->getOpCodeValue() == TR::InstOpCode::TRTR))
                {
-               (*_defRegs)[indexTarget++] = _targetReg[i];
+               _defRegs->push_back(_targetReg[i]);
                }
             }
          }
@@ -3061,9 +3061,9 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
             {
             TR::RealRegister *reg = self()->cg()->machine()->getS390RealRegister(i + (isAR ? TR::RealRegister::AR0 : TR::RealRegister::GPR0));
             if (loadOrStoreMultiple == 0) // load
-               (*_defRegs)[indexTarget++] = reg;
+               _defRegs->push_back(reg);
             else if (loadOrStoreMultiple == 1) // store
-               (*_useRegs)[indexSource++] = reg;
+               _useRegs->push_back(reg);
             }
          }
       }
@@ -3076,11 +3076,11 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
          {
          if (_sourceMem[i]->getBaseRegister()!=NULL)
             {
-            (*_useRegs)[indexSource++]=_sourceMem[i]->getBaseRegister();
+            _useRegs->push_back(_sourceMem[i]->getBaseRegister());
             }
          if (_sourceMem[i]->getIndexRegister()!=NULL)
             {
-            (*_useRegs)[indexSource++]=_sourceMem[i]->getIndexRegister();
+            _useRegs->push_back(_sourceMem[i]->getIndexRegister());
             }
          }
       }
@@ -3091,11 +3091,11 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
          {
          if (_targetMem[i]->getBaseRegister()!=NULL)
             {
-            (*_useRegs)[indexSource++]=_targetMem[i]->getBaseRegister();
+            _useRegs->push_back(_targetMem[i]->getBaseRegister());
             }
          if (_targetMem[i]->getIndexRegister()!=NULL)
             {
-            (*_useRegs)[indexSource++]=_targetMem[i]->getIndexRegister();
+            _useRegs->push_back(_targetMem[i]->getIndexRegister());
             }
          }
       }
@@ -3113,18 +3113,18 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
             {
             for (i = 0; i < dependencies->getNumPreConditions(); i++)
                {
-              tempRegister=preConditions->getRegisterDependency(i)->getRegister(self()->cg());
-              if (tempRegister && tempRegister->getRegisterPair()==NULL)
-                (*_defRegs)[indexTarget++]=tempRegister;
+               tempRegister=preConditions->getRegisterDependency(i)->getRegister(self()->cg());
+               if (tempRegister && tempRegister->getRegisterPair()==NULL)
+                  _defRegs->push_back(tempRegister);
                }
             }
          if (postConditions!=NULL)
             {
             for (i = 0; i < dependencies->getNumPostConditions(); i++)
                {
-             tempRegister=postConditions->getRegisterDependency(i)->getRegister(self()->cg());
-              if (tempRegister && tempRegister->getRegisterPair()==NULL)
-                (*_defRegs)[indexTarget++]=tempRegister;
+               tempRegister=postConditions->getRegisterDependency(i)->getRegister(self()->cg());
+               if (tempRegister && tempRegister->getRegisterPair()==NULL)
+                  _defRegs->push_back(tempRegister);
                }
             }
          }
@@ -3135,25 +3135,25 @@ OMR::Z::Instruction::setUseDefRegisters(bool updateDependencies)
       {
       if (_useRegs)
          {
-         for (i=0;i<_useRegs->size();i++)
+         for (auto it = _useRegs->begin(); it != _useRegs->end(); ++it)
             {
-            if (((*_useRegs)[i])->getRealRegister())
+            if ((*it)->getRealRegister())
                {
-               TR::RealRegister * realReg = toRealRegister((*_useRegs)[i]);
+               TR::RealRegister * realReg = toRealRegister(*it);
                if (realReg && realReg->isHighWordRegister())
-                  (*_useRegs)[i] = realReg->getLowWordRegister();
+                  *it = realReg->getLowWordRegister();
                }
             }
          }
       if (_defRegs)
          {
-         for (i=0;i<_defRegs->size();i++)
+         for (auto it = _defRegs->begin(); it != _defRegs->end(); ++it)
             {
-            if (((*_defRegs)[i])->getRealRegister())
+            if ((*it)->getRealRegister())
                {
-               TR::RealRegister * realReg = toRealRegister((*_defRegs)[i]);
+               TR::RealRegister * realReg = toRealRegister(*it);
                if (realReg && realReg->isHighWordRegister())
-                  (*_defRegs)[i] = realReg->getLowWordRegister();
+                  *it = realReg->getLowWordRegister();
                }
             }
          }
@@ -3165,15 +3165,12 @@ TR::Register *
 OMR::Z::Instruction::getSourceRegister(uint32_t i)
 
    {
-   if (_useRegs == NULL) return NULL;
-   if (_useRegs->size()<=i)
-      {
-      return NULL;
-      }
-   else
+   if (_useRegs && _useRegs->size() > i)
       {
       return (*_useRegs)[i];
       }
+
+   return NULL;
    }
 
 // Return i'th target reg or NULL
@@ -3181,15 +3178,12 @@ TR::Register *
 OMR::Z::Instruction::getTargetRegister(uint32_t i)
 
    {
-   if (_defRegs == NULL) return NULL;
-   if (_defRegs->size()<=i)
-      {
-      return NULL;
-      }
-   else
+   if (_defRegs && _defRegs->size() > i)
       {
       return (*_defRegs)[i];
       }
+
+   return NULL;
    }
 
 // Only RR instructions has implementation
