@@ -26,6 +26,7 @@
 #include "env/TRMemory.hpp"         // for TR_Memory, etc
 #include "il/Node.hpp"              // for Node, vcount_t
 #include "infra/Array.hpp"          // for TR_Array
+#include "infra/deque.hpp"
 
 class TR_UseDefInfo;
 namespace TR { class Optimizer; }
@@ -76,7 +77,7 @@ class TR_ValueNumberInfo : public TR::Allocatable<TR_ValueNumberInfo, TR::Alloca
       {
       if (index >= _numberOfNodes)
          return NULL;
-      return _nodes.ElementAt(index);
+      return _nodes[index];
       }
 
    /** Get the next node with the same value number (forms a ring) */
@@ -85,7 +86,7 @@ class TR_ValueNumberInfo : public TR::Allocatable<TR_ValueNumberInfo, TR::Alloca
       int32_t index = node->getGlobalIndex();
       if (index >= _numberOfNodes)
          return node;
-      return _nodes.ElementAt(_nextInRing.ElementAt(index));
+      return _nodes[_nextInRing.ElementAt(index)];
       }
 
    /** Set the value number of the node to that of the other node. */
@@ -123,7 +124,7 @@ class TR_ValueNumberInfo : public TR::Allocatable<TR_ValueNumberInfo, TR::Alloca
    TR::Optimizer            *_optimizer;
    TR_UseDefInfo            *_useDefInfo;
 
-   CS2::ArrayOf<TR::Node*, TR::Allocator>       _nodes;
+   TR::deque<TR::Node *>       _nodes;
    CS2::ArrayOf<int32_t, TR::Allocator>         _valueNumbers;
    CS2::ArrayOf<int32_t, TR::Allocator>         _nextInRing;
    TR::ParameterSymbol                       **_parmSymbols;

@@ -137,7 +137,7 @@ TR_ValueNumberInfo::TR_ValueNumberInfo(TR::Compilation *comp, TR::Optimizer *opt
       traceMsg(comp, "\n\n");
       }
 
-   _nodes.GrowTo(_numberOfNodes);
+   _nodes.resize(_numberOfNodes, NULL);
    _valueNumbers.GrowTo(_numberOfNodes);
    _nextInRing.GrowTo(_numberOfNodes);
 
@@ -414,14 +414,14 @@ void TR_ValueNumberInfo::initializeNode(TR::Node *node, int32_t &negativeValueNu
    {
    // *this    swipeable for debugging purposes
    int32_t index = node->getGlobalIndex();
-   if (_nodes.ElementAt(index) != NULL)
+   if (_nodes[index] != NULL)
       {
       // Node has already been initialized
       //
-      TR_ASSERT(_nodes.ElementAt(index) == node,"Value Numbering initialization error");
+      TR_ASSERT(_nodes[index] == node,"Value Numbering initialization error");
       return;
       }
-   _nodes.ElementAt(index) = node;
+   _nodes[index] = node;
    _nextInRing.ElementAt(index) = index;
 
    // Initialize the children
@@ -1313,7 +1313,7 @@ void TR_ValueNumberInfo::setValueNumber(TR::Node *node, TR::Node *other)
    if (index >= _numberOfNodes)
       {
       growTo(index);
-      _nodes.ElementAt(index) = node;
+      _nodes[index] = node;
       }
    else
       {
@@ -1348,7 +1348,7 @@ void TR_ValueNumberInfo::setUniqueValueNumber(TR::Node *node)
    if (index >= _numberOfNodes)
       {
       growTo(index);
-      _nodes.ElementAt(index) = node;
+      _nodes[index] = node;
       }
    else
       {
@@ -1383,7 +1383,7 @@ void TR_ValueNumberInfo::changeValueNumber(TR::Node *node, int32_t newVN)
    if (index >= _numberOfNodes)
       {
       growTo(index);
-      _nodes.ElementAt(index) = node;
+      _nodes[index] = node;
       _nextInRing.ElementAt(index) = index;
       _valueNumbers.ElementAt(index) = newVN;
       }
@@ -1417,13 +1417,13 @@ void TR_ValueNumberInfo::removeNodeInfo(TR::Node *node)
          _nextInRing.ElementAt(i) = _nextInRing.ElementAt(index);
          _nextInRing.ElementAt(index) = index;
          }
-      _nodes.ElementAt(index) = NULL;
+      _nodes[index] = NULL;
       }
    }
 
 void TR_ValueNumberInfo::growTo(int32_t index)
    {
-   _nodes.GrowTo(index+1);
+   _nodes.resize(index + 1, NULL);
    _valueNumbers.GrowTo(index+1);
    _nextInRing.GrowTo(index+1);
 
@@ -1434,7 +1434,6 @@ void TR_ValueNumberInfo::growTo(int32_t index)
    _numberOfNodes = index+1;
    for ( ; i < index; ++i)
       {
-      _nodes.ElementAt(i) = NULL;
       _nextInRing.ElementAt(i) = i;
       _valueNumbers.ElementAt(i) = _nextValue++;
       }
@@ -1597,7 +1596,7 @@ TR_HashValueNumberInfo::TR_HashValueNumberInfo(TR::Compilation *comp, TR::Optimi
       traceMsg(comp, "\n\n");
       }
 
-   _nodes.GrowTo(_numberOfNodes);
+   _nodes.resize(_numberOfNodes, NULL);
    _valueNumbers.GrowTo(_numberOfNodes);
    _nextInRing.GrowTo(_numberOfNodes);
 
@@ -1657,14 +1656,14 @@ void TR_HashValueNumberInfo::initializeNode(TR::Node * node, int32_t & negativeV
 {
     // *this    swipeable for debugging purposes
       int32_t index = node->getGlobalIndex();
-      if (_nodes.ElementAt(index) != NULL)
+      if (_nodes[index] != NULL)
          {
          // Node has already been initialized
          //
-         TR_ASSERT(_nodes.ElementAt(index) == node,"Value Numbering initialization error");
+         TR_ASSERT(_nodes[index] == node,"Value Numbering initialization error");
          return;
          }
-      _nodes.ElementAt(index) = node;
+      _nodes[index] = node;
       _nextInRing.ElementAt(index) = index;
 
       // Initialize the children
@@ -1828,7 +1827,7 @@ void TR_HashValueNumberInfo::allocateValueNumber(TR::Node * node)
             if( _nodeHash.Locate(nodeKey,loc))
                {
                int32_t otherNodeIndex = _nodeHash.DataAt(loc);
-               TR::Node * otherNode = _nodes.ElementAt(otherNodeIndex);
+               TR::Node * otherNode = _nodes[otherNodeIndex];
                TR_ASSERT((otherNode != NULL),"HASHVN :Non-null nodeTable entry expected for globalIndex:%d",otherNodeIndex);
 
  //              traceMsg(comp(),"JIAG1: Setting node %p value number to same number at node %p\n",node,otherNode);
