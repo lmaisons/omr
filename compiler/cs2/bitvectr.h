@@ -160,6 +160,10 @@ public:
   // Determine if this vector is a subset of the inputVector
   bool  operator <= (const ABitVector &inputVector) const;
 
+  static uint32_t ToWordIndex (BitIndex bitIndex);
+  static BitIndex BaseBitIndex (uint32_t wordIndex);
+  static BitIndex OffsetOfLastOne (BitWord bitWord);
+
   // Return the size in words (as defined by the type BitWord) of a vector
   // of the given bit length.
   uint32_t SizeInWords () const;
@@ -242,13 +246,30 @@ public:
       return SetToNextOneAfter(0);
     }
 
+    void SetToLastOne() {
+      SetToIndex(fVector.LastOne());
+    }
+
+    bool SetToPreviousOne() {
+      CS2Assert(Valid(), ("Invalid cursor."));
+      uint32_t wordIndex = ToWordIndex(fIndex);
+      BitWord word = fVector.WordAt(wordIndex);
+      word &= ~( fWord >> (fIndex % kBitWordSize) );
+      // Check for wrap-around, if the wordIndex type becomes signed, this needs to become -1.
+      while ( (word == 0) && ( wordIndex > 0 ) ) {
+        --wordIndex;
+        word = fVector.WordAt(wordIndex);
+      }
+      return SetToIndex( BaseBitIndex(wordIndex) + OffsetOfLastOne(word) );
+    }
+
     bool SetToNextOne() {
       fWord<<=1;
       fIndex+=1;
       BitWord word = fWord;
       if (fWord==0) {
         BitWord wordIndex;
-        for (wordIndex=(fIndex+kBitWordSize-1)/kBitWordSize;
+        for (wordIndex = SizeInWords(fIndex);
              wordIndex < fWordCount;
              wordIndex+=1) {
           word = fVector.WordAt(wordIndex);
@@ -268,18 +289,22 @@ public:
     }
 
     bool Valid() const {
-      return fIndex<fWordCount*kBitWordSize;
+      return Valid(fIndex, fWordCount);
     }
 
-    bool SetToNextOneAfter(uint32_t v) {
+    static bool Valid(BitIndex index, uint32_t wordCount) {
+      return index < (wordCount * kBitWordSize);
+    }
+
+    bool SetToNextOneAfter(uint32_t index) {
       fWordCount = fVector.SizeInWords();
-      fIndex=v;
+      fIndex=index;
       if (!Valid()) {
         fIndex=fWordCount * kBitWordSize;
         return false;
       }
-      fWord=fVector.WordAt(v/kBitWordSize);
-      fWord <<= (v%kBitWordSize);
+      fWord=fVector.WordAt( ToWordIndex(index) );
+      fWord <<= (index%kBitWordSize);
       if (fWord&kHighBit) return true;
       return SetToNextOne();
     }
@@ -297,6 +322,16 @@ public:
       CS2Assert (false, ("NOT IMPLEMENTED"));
       return false;
     }
+
+    bool SetToIndex(BitIndex index) {
+       fWordCount = fVector.SizeInWords();
+       fIndex = index;
+       if (!Valid()) return false;
+       fWord=fVector.WordAt( ToWordIndex(index) );
+       fWord <<= ( index % kBitWordSize);
+       return true;
+    }
+
     protected:
 
     const ABitVector &fVector;
@@ -566,6 +601,22 @@ inline uint32_t ABitVector<Allocator>::SizeInShortWords (BitIndex numBits) {
 template <class Allocator>
 inline uint32_t ABitVector<Allocator>::SizeInBytes (BitIndex numBits) {
   return ABitVector<Allocator>::SizeInWords(numBits) * sizeof(BitWord);
+}
+
+template <class Allocator>
+inline uint32_t ABitVector<Allocator>::ToWordIndex(BitIndex bitIndex) {
+  return (bitIndex / kBitWordSize);
+}
+
+template <class Allocator>
+inline BitIndex ABitVector<Allocator>::BaseBitIndex(uint32_t wordIndex) {
+  return (wordIndex * kBitWordSize);
+}
+
+// If no bits are set, will return the equivalent of static_cast<BitIndex>(-1)
+template <class Allocator>
+inline BitIndex ABitVector<Allocator>::OffsetOfLastOne(BitWord bitWord) {
+   return ( kBitWordSize - ( 1 + BitManipulator::TrailingZeroes(bitWord) ) );
 }
 
 // ABitVector<Allocator>::And (const ABitVector &)
