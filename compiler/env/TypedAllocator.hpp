@@ -30,6 +30,7 @@
 #include <cstddef>  // for ptrdiff_t, size_t
 #include <limits>   // for numeric_limits
 #include <new>      // for operator new
+#include "infra/ReferenceWrapper.hpp"
 
 namespace TR
 {
@@ -81,7 +82,53 @@ protected:
 
 private:
    untyped_allocator _backingAllocator;
+   };
 
+template <class Alloc>
+class typed_allocator<void, Alloc &>
+   {
+
+public:
+   typedef Alloc untyped_allocator_value;
+   typedef Alloc& untyped_allocator;
+
+   typedef typename std::size_t size_type;
+   typedef typename std::ptrdiff_t difference_type;
+
+   typedef void value_type;
+
+   typedef void * pointer;
+   typedef void * const const_pointer;
+
+   template <typename U> struct rebind { typedef typed_allocator<U, untyped_allocator> other; };
+
+   template <typename T, typename U>
+   friend bool operator == (const typed_allocator<T, untyped_allocator>& left, const typed_allocator<U, untyped_allocator>& right)
+      {
+      return left._backingAllocator == right._backingAllocator;
+      }
+
+   template <typename T, typename U>
+   friend bool operator != (const typed_allocator<T, untyped_allocator>& left, const typed_allocator<U, untyped_allocator>& right)
+      {
+      return !(left == right);
+      }
+
+protected:
+   explicit typed_allocator( untyped_allocator backingAllocator ) throw() : _backingAllocator(backingAllocator) {}
+
+   pointer allocate(size_type n, const_pointer hint)
+      {
+      return _backingAllocator.get().allocate(n);
+      }
+
+   value_type deallocate(pointer p, size_type n)
+      {
+      _backingAllocator.get().deallocate(p, n);
+      }
+
+private:
+   TR::reference_wrapper<untyped_allocator_value> _backingAllocator;
    };
 
 template <typename T, class Alloc>
@@ -134,7 +181,6 @@ class typed_allocator : public typed_allocator<void, Alloc>
 
    private:
    typed_allocator() throw(); /* delete */
-   typed_allocator &operator =(const typed_allocator &); /* delete */
    };
 
 }

@@ -36,19 +36,37 @@ template <typename T>
 class reference_wrapper {
 public:
   typedef T type;
-  typedef T& reference_type;
-  inline explicit reference_wrapper(reference_type ref) throw();
+  typedef T& reference;
+  typedef T* pointer;
+  inline explicit reference_wrapper(reference ref) throw();
   inline reference_wrapper(const reference_wrapper &other) throw();
   inline reference_wrapper &operator =(const reference_wrapper &other) throw();
-  inline reference_type get() throw();
-  inline operator reference_type() throw();
+  inline reference get() throw();
+  inline operator reference() throw();
+
+  friend void swap(reference_wrapper &left, reference_wrapper&right) throw()
+  {
+    pointer temp(left.m_ref);
+    left.m_ref = right.m_ref;
+    right.m_ref = temp;
+  }
+
+  friend bool operator ==(const reference_wrapper &left, const reference_wrapper &right)
+  {
+    return *left.m_ref == *right.m_ref;
+  }
+
+  friend bool operator !=(const reference_wrapper &left, const reference_wrapper &right)
+  {
+    return !operator ==(left, right);
+  }
 
 private:
-  T * m_ref;
+  pointer m_ref;
 };
 
 template <typename T>
-reference_wrapper<T>::reference_wrapper(reference_type ref) throw():
+reference_wrapper<T>::reference_wrapper(reference ref) throw():
   m_ref(&ref)
 {
 }
@@ -68,14 +86,14 @@ reference_wrapper<T>::operator =(const reference_wrapper &other) throw()
 }
 
 template <typename T>
-typename reference_wrapper<T>::reference_type
+typename reference_wrapper<T>::reference
 reference_wrapper<T>::get() throw()
 {
   return *m_ref;
 }
 
 template <typename T>
-reference_wrapper<T>::operator reference_type() throw()
+reference_wrapper<T>::operator reference() throw()
 {
   return *m_ref;
 }
