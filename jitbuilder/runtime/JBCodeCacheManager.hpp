@@ -48,7 +48,7 @@ class OMR_EXTENSIBLE CodeCacheManager : public OMR::CodeCacheManagerConnector
    TR::CodeCacheManager *self();
 
 public:
-   CodeCacheManager(TR_FrontEnd *fe) : OMR::CodeCacheManagerConnector(fe)
+   CodeCacheManager(TR::RawAllocator rawAllocator) : OMR::CodeCacheManagerConnector(rawAllocator)
       {
       TR_ASSERT_FATAL(!_codeCacheManager, "CodeCacheManager already instantiated. "
                                           "Cannot create multiple instances");
@@ -64,11 +64,6 @@ public:
       return _codeCacheManager;
       }
 
-   static JitConfig *jitConfig()            { return _jitConfig; }
-   FrontEnd *pyfe()                         { return reinterpret_cast<FrontEnd *>(fe()); }
-
-   TR::CodeCache *initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup);
-
    void *getMemory(size_t sizeInBytes);
    void  freeMemory(void *memoryToFree);
 
@@ -76,10 +71,10 @@ public:
                                                         size_t &codeCacheSizeToAllocate,
                                                         void *preferredStartAddress);
 
+   void registerStaticRelocation(const TR::StaticRelocation &relocation, TR_Memory &trMemory);
+
 private :
    static TR::CodeCacheManager *_codeCacheManager;
-   static JitConfig *_jitConfig;
-   //static TR::GlobalAllocator & _allocator;
    };
 
 

@@ -44,7 +44,7 @@ class OMR_EXTENSIBLE CodeCacheManager : public OMR::CodeCacheManagerConnector
    TR::CodeCacheManager *self();
 
 public:
-   CodeCacheManager(TR_FrontEnd *fe) : OMR::CodeCacheManagerConnector(fe)
+   CodeCacheManager(TR::RawAllocator rawAllocator) : OMR::CodeCacheManagerConnector(rawAllocator)
       {
       _codeCacheManager = reinterpret_cast<TR::CodeCacheManager *>(this);
       }
@@ -52,10 +52,6 @@ public:
    void *operator new(size_t s, TR::CodeCacheManager *m) { return m; }
 
    static TR::CodeCacheManager *instance()  { return _codeCacheManager; }
-   static JitConfig *jitConfig()            { return _jitConfig; }
-   FrontEnd *pyfe();
-
-   TR::CodeCache *initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup);
 
    void *getMemory(size_t sizeInBytes);
    void  freeMemory(void *memoryToFree);
@@ -66,8 +62,6 @@ public:
 
 private :
    static TR::CodeCacheManager *_codeCacheManager;
-   static JitConfig *_jitConfig;
-   //static TR::GlobalAllocator & _allocator;
    };
 
 } // namespace TestCompiler

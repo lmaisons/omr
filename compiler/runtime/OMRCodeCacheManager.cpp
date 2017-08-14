@@ -45,6 +45,19 @@
 #include <unistd.h>                     // for getpid, pid_t
 #endif
 
+OMR::CodeCacheManager::CodeCacheManager(TR::RawAllocator rawAllocator) :
+   _rawAllocator(rawAllocator),
+   _initialized(false),
+   _codeCacheIsFull(false)
+#if defined(LINUX)
+  ,_symbols(rawAllocator)
+  ,_relocations(rawAllocator)
+  ,_totalELFSymbolNamesLength(0)
+#endif
+   {
+   }
+
+
 TR::CodeCacheManager *
 OMR::CodeCacheManager::self()
    {
@@ -942,7 +955,10 @@ OMR::CodeCacheManager::repositoryCodeCacheCreated()
 #if (HOST_OS == OMR_LINUX)
    TR::CodeCacheConfig &config = self()->codeCacheConfig();
    if (config.emitElfObject())
+      {
       self()->initializeELFHeader();
+      self()->initializeELFProgramHeader();
+      }
 #endif // HOST_OS == OMR_LINUX
    }
 
@@ -950,20 +966,18 @@ void
 OMR::CodeCacheManager::registerCompiledMethod(const char *sig, uint8_t *startPC, uint32_t codeSize)
    {
 #if (HOST_OS == OMR_LINUX)
-   CodeCacheSymbol *newSymbol = static_cast<CodeCacheSymbol *> (self()->getMemory(sizeof(CodeCacheSymbol)));
-
-   uint32_t nameLength = strlen(sig) + 1;
+   size_t nameLength = strlen(sig) + 1;
    char *name = static_cast<char *> (self()->getMemory(nameLength * sizeof(char)));
-   memcpy(name, sig, nameLength);
-   newSymbol->_name = name;
-   newSymbol->_nameLength = nameLength;
-   newSymbol->_start = startPC;
-   newSymbol->_size = codeSize;
-   newSymbol->_next = _symbols;
-   _symbols = newSymbol;
-   _numELFSymbols++;
+   strncpy(name, sig, nameLength);
+   fprintf(stderr,"new symbol name is %s\n", name);
+   _symbols.push_back(CodeCacheSymbol{name, static_cast<uint32_t>(nameLength), startPC, codeSize});
    _totalELFSymbolNamesLength += nameLength;
 #endif // HOST_OS == OMR_LINUX
+   }
+
+void
+OMR::CodeCacheManager::registerStaticRelocation(const TR::StaticRelocation &relocation, TR_Memory &trMemory)
+   {
    }
 
 void *
@@ -1131,10 +1145,6 @@ OMR::CodeCacheManager::reservationInterfaceCache(void *callSite, TR_OpaqueMethod
 
 #if (HOST_OS == OMR_LINUX)
 
-OMR::CodeCacheSymbol * OMR::CodeCacheManager::_symbols = NULL;
-uint32_t OMR::CodeCacheManager::_numELFSymbols = 0; // does not include UNDEF symbol: embedded in ELfCodeCacheTrailer
-uint32_t OMR::CodeCacheManager::_totalELFSymbolNamesLength = 1; // pre-count 0 for the UNDEF symbol name
-
 void
 OMR::CodeCacheManager::initializeELFHeader()
    {
@@ -1153,47 +1163,73 @@ OMR::CodeCacheManager::initializeELFHeader()
 
    self()->initializeELFHeaderForPlatform(hdr);
 
-   hdr->hdr.e_type = ET_EXEC;
+   hdr->hdr.e_type = ET_REL; // for object file, was ET_EXEC;
    hdr->hdr.e_version = EV_CURRENT;
 
    uint32_t cacheSize = _codeCacheRepositorySegment->segmentTop() - _codeCacheRepositorySegment->segmentBase();
    hdr->hdr.e_entry = (ELFAddress) _codeCacheRepositorySegment->segmentBase();
-   hdr->hdr.e_phoff = offsetof(ELFCodeCacheHeader, phdr);
+   hdr->hdr.e_phoff = 0;
    hdr->hdr.e_shoff = sizeof(ELFCodeCacheHeader) + cacheSize;
    hdr->hdr.e_flags = 0;
 
    hdr->hdr.e_ehsize = sizeof(ELFHeader);
 
-   hdr->hdr.e_phentsize = sizeof(ELFProgramHeader);
-   hdr->hdr.e_phnum = 1;
+   hdr->hdr.e_phentsize = 0;
+   hdr->hdr.e_phnum = 0;
    hdr->hdr.e_shentsize = sizeof(ELFSectionHeader);
-   hdr->hdr.e_shnum = 5; // number of sections in trailer
-   hdr->hdr.e_shstrndx = 3; // index to shared string table section in trailer
+   hdr->hdr.e_shnum = 6; // number of sections in trailer
+   hdr->hdr.e_shstrndx = 4; // index to shared string table section in trailer
 
-   // program header
-   hdr->phdr.p_type = PT_LOAD;
-   hdr->phdr.p_offset = sizeof(ELFCodeCacheHeader);
-   hdr->phdr.p_vaddr = (ELFAddress) _codeCacheRepositorySegment->segmentBase();
-   hdr->phdr.p_paddr = (ELFAddress) _codeCacheRepositorySegment->segmentBase();
-   hdr->phdr.p_filesz = cacheSize;
-   hdr->phdr.p_memsz = cacheSize;
-   hdr->phdr.p_flags = PF_X | PF_R; // should add PF_W if we get around to loading patchable code
-   hdr->phdr.p_align = 0x1000;  //0x10000;
    _elfHeader = hdr;
    }
 
 
 void
+OMR::CodeCacheManager::initializeELFProgramHeader()
+   {
+   uint32_t cacheSize = _codeCacheRepositorySegment->segmentTop() - _codeCacheRepositorySegment->segmentBase();
+
+   _elfHeader->hdr.e_phoff = offsetof(ELFCodeCacheHeader, phdr);
+   _elfHeader->hdr.e_phentsize = sizeof(ELFProgramHeader);
+   _elfHeader->hdr.e_phnum = 1;
+
+   // program header
+   _elfHeader->phdr.p_type = PT_LOAD;
+   _elfHeader->phdr.p_offset = sizeof(ELFCodeCacheHeader);
+   _elfHeader->phdr.p_vaddr = (ELFAddress)0; // _codeCacheRepositorySegment->segmentBase();
+   _elfHeader->phdr.p_paddr = (ELFAddress)0; // _codeCacheRepositorySegment->segmentBase();
+   _elfHeader->phdr.p_filesz = cacheSize;
+   _elfHeader->phdr.p_memsz = cacheSize;
+   _elfHeader->phdr.p_flags = PF_X | PF_R; // should add PF_W if we get around to loading patchable code
+   _elfHeader->phdr.p_align = 0x1000;  //0x10000;
+   }
+
+size_t
+OMR::CodeCacheManager::numELFSymbols()
+   {
+   return _symbols.size();
+   }
+
+size_t
+OMR::CodeCacheManager::numELFRelocations()
+   {
+   return _relocations.size();
+   }
+
+void
 OMR::CodeCacheManager::initializeELFTrailer()
    {
+   _totalELFSymbolNamesLength = (_totalELFSymbolNamesLength+(sizeof(void*)-1)) & ~(sizeof(void*) - 1);
    _elfTrailerSize = sizeof(ELFCodeCacheTrailer) +
-                     _numELFSymbols * sizeof(ELFSymbol) + // NOTE: ELFCodeCacheTrailer includes 1 ELFSymbol: UNDEF
-                     _totalELFSymbolNamesLength;
+                     numELFSymbols() * sizeof(ELFSymbol) + // NOTE: ELFCodeCacheTrailer includes 1 ELFSymbol: UNDEF
+                     _totalELFSymbolNamesLength +
+                     numELFRelocations() * sizeof(ELFRela);
    ELFCodeCacheTrailer *trlr = static_cast<ELFCodeCacheTrailer *>(self()->getMemory(_elfTrailerSize));
 
-   uint32_t trailerStartOffset = sizeof(ELFCodeCacheHeader) + _elfHeader->phdr.p_filesz;
-   uint32_t symbolsStartOffset = trailerStartOffset + offsetof(ELFCodeCacheTrailer, symbols);
-   uint32_t symbolNamesStartOffset = symbolsStartOffset + (_numELFSymbols+1) * sizeof(ELFSymbol);
+   size_t trailerStartOffset = sizeof(ELFCodeCacheHeader) + _elfHeader->phdr.p_filesz;
+   size_t symbolsStartOffset = trailerStartOffset + offsetof(ELFCodeCacheTrailer, symbols);
+   size_t symbolNamesStartOffset = symbolsStartOffset + (numELFSymbols()+1) * sizeof(ELFSymbol);
+   size_t relaStartOffset = symbolNamesStartOffset + _totalELFSymbolNamesLength;
 
    trlr->zeroSection.sh_name = 0;
    trlr->zeroSection.sh_type = 0;
@@ -1209,7 +1245,7 @@ OMR::CodeCacheManager::initializeELFTrailer()
    trlr->textSection.sh_name = trlr->textSectionName - trlr->zeroSectionName;
    trlr->textSection.sh_type = SHT_PROGBITS;
    trlr->textSection.sh_flags = SHF_ALLOC | SHF_EXECINSTR;
-   trlr->textSection.sh_addr = (ELFAddress) _codeCacheRepositorySegment->segmentBase();
+   trlr->textSection.sh_addr = (ELFAddress) 0; //_codeCacheRepositorySegment->segmentBase();
    trlr->textSection.sh_offset = sizeof(ELFCodeCacheHeader);
    trlr->textSection.sh_size = _codeCacheRepositorySegment->segmentTop() - _codeCacheRepositorySegment->segmentBase();
    trlr->textSection.sh_link = 0;
@@ -1217,13 +1253,24 @@ OMR::CodeCacheManager::initializeELFTrailer()
    trlr->textSection.sh_addralign = 32; // code cache alignment?
    trlr->textSection.sh_entsize = 0;
 
+   trlr->relaSection.sh_name = trlr->relaSectionName - trlr->zeroSectionName;
+   trlr->relaSection.sh_type = SHT_RELA;
+   trlr->relaSection.sh_flags = 0;
+   trlr->relaSection.sh_addr = 0;
+   trlr->relaSection.sh_offset = relaStartOffset;
+   trlr->relaSection.sh_size = numELFRelocations() * sizeof(ELFRela);
+   trlr->relaSection.sh_link = 3; // dynsymSection
+   trlr->relaSection.sh_info = 1;
+   trlr->relaSection.sh_addralign = 8;
+   trlr->relaSection.sh_entsize = sizeof(ELFRela);
+
    trlr->dynsymSection.sh_name = trlr->dynsymSectionName - trlr->zeroSectionName;
    trlr->dynsymSection.sh_type = SHT_SYMTAB; // SHT_DYNSYM
    trlr->dynsymSection.sh_flags = 0; //SHF_ALLOC;
    trlr->dynsymSection.sh_addr = 0; //(ELFAddress) &((uint8_t *)_elfHeader + symbolStartOffset); // fake address because not continuous
    trlr->dynsymSection.sh_offset = symbolsStartOffset;
-   trlr->dynsymSection.sh_size = (_numELFSymbols + 1)*sizeof(ELFSymbol);
-   trlr->dynsymSection.sh_link = 4; // dynamic string table index
+   trlr->dynsymSection.sh_size = (numELFSymbols() + 1)*sizeof(ELFSymbol);
+   trlr->dynsymSection.sh_link = 5; // dynamic string table index
    trlr->dynsymSection.sh_info = 1; // index of first non-local symbol: for now all symbols are global
    trlr->dynsymSection.sh_addralign = 8;
    trlr->dynsymSection.sh_entsize = sizeof(ELFSymbol);
@@ -1236,6 +1283,7 @@ OMR::CodeCacheManager::initializeELFTrailer()
    trlr->shstrtabSection.sh_size = sizeof(trlr->zeroSectionName) +
                                    sizeof(trlr->shstrtabSectionName) +
                                    sizeof(trlr->textSectionName) +
+                                   sizeof(trlr->relaSectionName) +
                                    sizeof(trlr->dynsymSectionName) +
                                    sizeof(trlr->dynstrSectionName);
    trlr->shstrtabSection.sh_link = 0;
@@ -1257,43 +1305,50 @@ OMR::CodeCacheManager::initializeELFTrailer()
    trlr->zeroSectionName[0] = 0;
    strcpy(trlr->shstrtabSectionName, ".shstrtab");
    strcpy(trlr->textSectionName, ".text");
+   strcpy(trlr->relaSectionName, ".rela.text");
    strcpy(trlr->dynsymSectionName, ".symtab");
-   strcpy(trlr->dynstrSectionName, ".dynstr");
+   strcpy(trlr->dynstrSectionName, ".strtab");
 
    // now walk list of compiled code symbols building up the symbol names and filling in array of ELFSymbol structures
    ELFSymbol *elfSymbols = trlr->symbols + 0;
-   char *elfSymbolNames = (char *) (elfSymbols + (_numELFSymbols+1));
+   char *elfSymbolNames = (char *) (elfSymbols + (numELFSymbols()+1));
 
    // first symbol is UNDEF symbol: all zeros, even name is zero-terminated empty string
    elfSymbolNames[0] = 0;
    elfSymbols[0].st_name = 0;
-   elfSymbols[0].st_info = ELF_ST_INFO(0,0);
+   elfSymbols[0].st_info = ELF_ST_INFO(0,STT_NOTYPE);
    elfSymbols[0].st_other = 0;
    elfSymbols[0].st_shndx = 0;
    elfSymbols[0].st_value = 0;
    elfSymbols[0].st_size = 0;
 
-   CodeCacheSymbol *sym = _symbols;
    ELFSymbol *elfSym = elfSymbols + 1;
    char *names = elfSymbolNames + 1;
-   while (sym)
+   for (auto it = _symbols.begin(); it != _symbols.end(); ++it)
       {
-      //fprintf(stderr, "Writing elf symbol %d, name(%d) = %s\n", (elfSym - elfSymbols), sym->_nameLength, sym->_name);
-      memcpy(names, sym->_name, sym->_nameLength);
+      fprintf(stderr, "Writing elf symbol %d, name(%d) = %s\n", (elfSym - elfSymbols), it->_nameLength, it->_name);
+      memcpy(names, it->_name, it->_nameLength);
 
       elfSym->st_name = names - elfSymbolNames;
       elfSym->st_info = ELF_ST_INFO(STB_GLOBAL,STT_FUNC);
-      elfSym->st_other = 0;
-      elfSym->st_shndx = 1;
-      elfSym->st_value = (ELFAddress) sym->_start;
-      elfSym->st_size = sym->_size;
+      elfSym->st_other = ELF64_ST_VISIBILITY(STV_DEFAULT);
+      elfSym->st_shndx = it->_start ? 1 : SHN_UNDEF; // text section
+      elfSym->st_value = it->_start ? static_cast<ELFAddress>(it->_start - _codeCacheRepositorySegment->segmentBase()) : 0;
+      elfSym->st_size = it->_size;
 
-      names += sym->_nameLength;
+      names += it->_nameLength;
       elfSym++;
-
-      sym = sym->_next;
       }
 
+
+   ELFRela *elfRela = pointer_cast<ELFRela *>(elfSymbolNames + _totalELFSymbolNamesLength);
+   for (auto it = _relocations.begin(); it != _relocations.end(); ++it)
+      {
+      elfRela->r_offset = static_cast<ELFAddress>(it->_location - _codeCacheRepositorySegment->segmentBase());
+      elfRela->r_info = ELF64_R_INFO(it->_symbol + 1, it->_type);
+      elfRela->r_addend = 0;
+      ++elfRela;
+      }
    _elfTrailer = trlr;
    }
 
@@ -1301,7 +1356,11 @@ void
 OMR::CodeCacheManager::initializeELFHeaderForPlatform(ELFCodeCacheHeader *hdr)
    {
    #if (HOST_ARCH == ARCH_X86)
-      hdr->hdr.e_machine = EM_386;
+      #if defined(TR_TARGET_64BIT)
+         hdr->hdr.e_machine = EM_X86_64;
+      #else
+         hdr->hdr.e_machine = EM_386;
+      #endif
    #elif (HOST_ARCH == ARCH_POWER)
       #if defined(TR_TARGET_64BIT)
          hdr->hdr.e_machine = EM_PPC64;

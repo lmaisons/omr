@@ -374,7 +374,17 @@ compileMethodFromDetails(
             }
 
          if (TR::Options::getCmdLineOptions()->getOption(TR_PerfTool))
-            generatePerfToolEntry(startPC, compiler.cg()->getCodeEnd(), compiler.signature(), compiler.getHotnessName(compiler.getMethodHotness()));
+            {
+            TR::CodeCacheManager &codeCacheManager(fe.codeCacheManager());
+            TR::CodeGenerator &codeGenerator(*compiler.cg());
+            codeCacheManager.registerCompiledMethod(compiler.externalName(), startPC, codeGenerator.getCodeLength());
+            auto &relocations = codeGenerator.getStaticRelocations();
+            for (auto it = relocations.begin(); it != relocations.end(); ++it)
+               {
+               codeCacheManager.registerStaticRelocation(*it, trMemory);
+               }
+            generatePerfToolEntry(startPC, codeGenerator.getCodeEnd(), compiler.signature(), compiler.getHotnessName(compiler.getMethodHotness()));
+            }
 
          if (compiler.getOutFile() != NULL && compiler.getOption(TR_TraceAll))
             traceMsg((&compiler), "<result success=\"true\" startPC=\"%#p\" time=\"%lld.%lldms\"/>\n",

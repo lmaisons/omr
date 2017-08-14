@@ -30,6 +30,7 @@ namespace TR { typedef OMR::RawAllocator RawAllocator; }
 #include <stddef.h>  // for size_t
 #include <cstdlib>   // for free, malloc
 #include <new>       // for bad_alloc, nothrow, nothrow_t
+#include "env/TypedAllocator.hpp"
 
 namespace OMR {
 
@@ -74,6 +75,12 @@ public:
    friend bool operator !=(const RawAllocator &left, const RawAllocator &right)
       {
       return !operator ==(left, right);
+      }
+
+   template <typename T>
+   operator TR::typed_allocator< T, RawAllocator >() throw()
+      {
+      return TR::typed_allocator< T, RawAllocator >(*this);
       }
 
    };

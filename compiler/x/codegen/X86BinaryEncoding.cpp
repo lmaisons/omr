@@ -58,6 +58,7 @@
 #include "x/codegen/X86Instruction.hpp"
 #include "x/codegen/X86Ops.hpp"                    // for TR_X86OpCode, etc
 #include "x/codegen/X86Ops_inlines.hpp"
+#include "codegen/StaticRelocation.hpp"
 
 #ifdef J9_PROJECT_SPECIFIC
 #include "env/CHTable.hpp"
@@ -66,6 +67,7 @@
 
 class TR_OpaqueClassBlock;
 class TR_OpaqueMethodBlock;
+namespace TR { class ResolvedMethod; }
 
 int32_t memoryBarrierRequired(
       TR_X86OpCode &op,
@@ -2704,6 +2706,12 @@ TR::AMD64RegImm64SymInstruction::addMetaDataForCodeAddress(uint8_t *cursor)
                                                                                       __LINE__,
                                                                                       getNode());
 
+            break;
+            }
+         case TR_NativeMethodAbsolute:
+            {
+            TR_ResolvedMethod *target = getSymbolReference()->getSymbol()->castToResolvedMethodSymbol()->getResolvedMethod();
+            cg()->addStaticRelocation(TR::StaticRelocation(cursor, target, TR::StaticRelocationSize::word64, TR::StaticRelocationType::Absolute));
             break;
             }
          default:

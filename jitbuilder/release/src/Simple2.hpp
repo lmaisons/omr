@@ -1,6 +1,6 @@
 /*******************************************************************************
  *
- * (c) Copyright IBM Corp. 2000, 2016
+ * (c) Copyright IBM Corp. 2016, 2016
  *
  *  This program and the accompanying materials are made available
  *  under the terms of the Eclipse Public License v1.0 and
@@ -14,22 +14,19 @@
  *
  * Contributors:
  *    Multiple authors (IBM Corp.) - initial implementation and documentation
- *******************************************************************************/
+ ******************************************************************************/
 
-#ifndef TR_CODECACHEMANAGER_INCL
-#define TR_CODECACHEMANAGER_INCL
 
-#include "runtime/TestCodeCacheManager.hpp"
+#ifndef SIMPLE_INCL
+#define SIMPLE_INCL
 
-namespace TR
-{
+#include "ilgen/MethodBuilder.hpp"
 
-class OMR_EXTENSIBLE CodeCacheManager : public TestCompiler::CodeCacheManagerConnector
+class SimpleMethod : public TR::MethodBuilder
    {
    public:
-   CodeCacheManager(TR::RawAllocator rawAllocator) : TestCompiler::CodeCacheManagerConnector(rawAllocator) { }
+   SimpleMethod(TR::TypeDictionary *, const char *);
+   virtual bool buildIL();
    };
 
-} // namespace TR
-
-#endif // defined(TR_CODECACHEMANAGER_INCL)
+#endif // !defined(SIMPLE_INCL)

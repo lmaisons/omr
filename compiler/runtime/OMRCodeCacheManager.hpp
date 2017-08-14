@@ -27,8 +27,10 @@
 #include "runtime/MethodExceptionData.hpp"     // for MethodExceptionData
 #include "runtime/Runtime.hpp"                 // for TR_CCPreLoadedCode, etc
 #include "runtime/CodeCacheTypes.hpp"
+#include "env/RawAllocator.hpp"
 
 class TR_FrontEnd;
+class TR_Memory;
 class TR_OpaqueMethodBlock;
 namespace TR { class CodeCache; }
 namespace TR { class CodeCacheManager; }
@@ -40,10 +42,13 @@ namespace OMR { class FaintCacheBlock; }
 namespace OMR { typedef void CodeCacheTrampolineCode; }
 namespace OMR { class CodeCacheManager; }
 namespace OMR { typedef CodeCacheManager CodeCacheManagerConnector; }
+namespace TR { class StaticRelocation; }
 
 #if (HOST_OS == OMR_LINUX)
 
 #include <elf.h>                            // for ELF64_ST_INFO, etc
+#include <vector>
+#include <env/TypedAllocator.hpp>
 
 #if defined(TR_HOST_64BIT)
 typedef Elf64_Ehdr ELFHeader;
@@ -51,6 +56,8 @@ typedef Elf64_Shdr ELFSectionHeader;
 typedef Elf64_Phdr ELFProgramHeader;
 typedef Elf64_Addr ELFAddress;
 typedef Elf64_Sym ELFSymbol;
+typedef Elf64_Rela ELFRela;
+typedef Elf64_Off ELFOffset;
 #define ELF_ST_INFO(bind, type) ELF64_ST_INFO(bind, type)
 #define ELFClass ELFCLASS64;
 #else
@@ -59,6 +66,8 @@ typedef Elf32_Shdr ELFSectionHeader;
 typedef Elf32_Phdr ELFProgramHeader;
 typedef Elf32_Addr ELFAddress;
 typedef Elf32_Sym ELFSymbol;
+typedef Elf32_Rela ELFRela;
+typedef Elf32_Off ELFOffset;
 #define ELF_ST_INFO(bind, type) ELF32_ST_INFO(bind, type)
 #define ELFClass ELFCLASS32;
 #endif
@@ -74,6 +83,7 @@ struct ELFCodeCacheTrailer
    {
    ELFSectionHeader zeroSection;
    ELFSectionHeader textSection;
+   ELFSectionHeader relaSection;
    ELFSectionHeader dynsymSection;
    ELFSectionHeader shstrtabSection;
    ELFSectionHeader dynstrSection;
@@ -81,22 +91,18 @@ struct ELFCodeCacheTrailer
    char zeroSectionName[1];
    char shstrtabSectionName[10];
    char textSectionName[6];
+   char relaSectionName[11];
    char dynsymSectionName[8];
    char dynstrSectionName[8];
 
    // start of a variable sized region: an ELFSymbol structure per symbol + total size of elf symbol names
    ELFSymbol symbols[1];
+
+   // followed by variable sized symbol names located only by computed offset
+
+   // followed by rela entries located only by computed offset
    };
 
-// structure used to track regions of code cache that will become symbols
-typedef struct CodeCacheSymbol
-   {
-   const char *_name;
-   uint32_t _nameLength;
-   uint8_t *_start;
-   uint32_t _size;
-   struct CodeCacheSymbol *_next;
-   } CodeCacheSymbol;
 } // namespace OMR
 
 #endif // HOST_OS == OMR_LINUX
@@ -114,13 +120,26 @@ protected:
       TR::Monitor *_mutex;
       };
 
+   // structure used to track regions of code cache that will become symbols
+   struct CodeCacheSymbol
+      {
+      const char *_name;
+      uint32_t _nameLength;
+      uint8_t *_start;
+      uint32_t _size;
+      };
+
+   struct CodeCacheRelocation
+      {
+      uint8_t *_location;
+      uint32_t _type;
+      uint32_t _symbol;
+      };
+
 public:
    enum ErrorCode { };
 
-   CodeCacheManager(TR_FrontEnd *fe) : _fe(fe)
-      {
-      _initialized = false;
-      }
+   CodeCacheManager(TR::RawAllocator rawAllocator);
 
    class CacheListCriticalSection : public CriticalSection
       {
@@ -135,17 +154,13 @@ public:
       };
 
    TR::CodeCacheConfig & codeCacheConfig() { return _config; }
-   TR_FrontEnd *fe()                       { return _fe; }
+   bool codeCacheIsFull() { return _codeCacheIsFull; }
+   void setCodeCacheIsFull(bool codeCacheIsFull) { _codeCacheIsFull = codeCacheIsFull; }
 
    TR::CodeCache *initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup);
    void lateInitialization();
 
    void destroy();
-
-   // These two functions are for allocating Native backing memory for code cache structures
-   // In future these facilities should probably be implemented via cs2 allocators
-   void *getMemory(size_t sizeInBytes);
-   void  freeMemory(void *memoryToFree);
 
    TR::CodeCache * allocateCodeCacheObject(TR::CodeCacheMemorySegment *codeCacheSegment,
                                            size_t codeCacheSizeAllocated,
@@ -237,14 +252,15 @@ public:
 
    void repositoryCodeCacheCreated();
    void registerCompiledMethod(const char *sig, uint8_t *startPC, uint32_t codeSize);
+   void registerStaticRelocation(const TR::StaticRelocation &relocation, TR_Memory &trMemory);
 
 protected:
 
    void printRemainingSpaceInCodeCaches();
    void printOccupancyStats();
 
+   TR::RawAllocator               _rawAllocator;
    TR::CodeCacheConfig            _config;
-   TR_FrontEnd                   *_fe;
    TR::CodeCache                 *_lastCache;                         /*!< last code cache round robined through */
    CodeCacheList                  _codeCacheList;                     /*!< list of allocated code caches */
    int32_t                        _curNumberOfCodeCaches;
@@ -256,22 +272,30 @@ protected:
 
    bool                           _initialized;                       /*!< flag to indicate if code cache manager has been initialized or not */
    bool                           _lowCodeCacheSpaceThresholdReached; /*!< true if close to exhausting available code cache */
+   bool                           _codeCacheIsFull;
 
 #if (HOST_OS == OMR_LINUX)
    public:
    void initializeELFHeader();
+   void initializeELFProgramHeader();
    void initializeELFTrailer();
    void initializeELFHeaderForPlatform(ELFCodeCacheHeader *hdr);
+   size_t numELFRelocations();
+   size_t numELFSymbols();
 
    protected:
    struct ELFCodeCacheHeader     *_elfHeader;
    struct ELFCodeCacheTrailer    *_elfTrailer;
    uint32_t                       _elfTrailerSize;
 
-   // collect information on code cache symbols here, will be post processed into the elf trailer structure
-   static CodeCacheSymbol        *_symbols;
-   static uint32_t                _numELFSymbols;
-   static uint32_t                _totalELFSymbolNamesLength;
+   typedef TR::typed_allocator< CodeCacheSymbol, TR::RawAllocator > SymbolContainerAllocator;
+   typedef std::vector< CodeCacheSymbol, SymbolContainerAllocator > SymbolContainer;
+   SymbolContainer _symbols;
+   typedef TR::typed_allocator< CodeCacheRelocation, TR::RawAllocator > RelocationContainerAllocator;
+   typedef std::vector< CodeCacheRelocation, SymbolContainerAllocator > RelocationContainer;
+   RelocationContainer _relocations;
+   size_t _totalELFSymbolNamesLength;
+
 #endif // HOST_OS == OMR_LINUX
    };
 

@@ -21,6 +21,8 @@
 #include "runtime/CodeCacheManager.hpp"
 #include "runtime/CodeCacheMemorySegment.hpp"
 #include "env/FrontEnd.hpp"
+#include "compile/Method.hpp"
+#include "codegen/StaticRelocation.hpp"
 
 
 // Allocate and initialize a new code cache
@@ -31,22 +33,12 @@
 
 
 TR::CodeCacheManager *JitBuilder::CodeCacheManager::_codeCacheManager = NULL;
-JitBuilder::JitConfig *JitBuilder::CodeCacheManager::_jitConfig = NULL;
 
 
 TR::CodeCacheManager *
 JitBuilder::CodeCacheManager::self()
    {
    return static_cast<TR::CodeCacheManager *>(this);
-   }
-
-
-TR::CodeCache *
-JitBuilder::CodeCacheManager::initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup)
-   {
-   _jitConfig = pyfe()->jitConfig();
-   //_allocator = TR::globalAllocator("CodeCache");
-   return this->OMR::CodeCacheManager::initialize(useConsolidatedCache, numberOfCodeCachesToCreateAtStartup);
    }
 
 void *
@@ -105,4 +97,20 @@ JitBuilder::CodeCacheManager::allocateCodeCacheSegment(size_t segmentSize,
    TR::CodeCacheMemorySegment *memSegment = (TR::CodeCacheMemorySegment *) ((size_t)memorySlab + codeCacheSizeToAllocate - sizeof(TR::CodeCacheMemorySegment));
    new (memSegment) TR::CodeCacheMemorySegment(memorySlab, reinterpret_cast<uint8_t *>(memSegment));
    return memSegment;
+   }
+
+void
+JitBuilder::CodeCacheManager::registerStaticRelocation(const TR::StaticRelocation &relocation, TR_Memory &trMemory)
+   {
+#if (HOST_OS == OMR_LINUX)
+   const char * const symbolName(static_cast<TR::ResolvedMethod *>(relocation.symbol())->externalName(&trMemory, heapAlloc));
+   size_t nameLength(strlen(symbolName) + 1);
+   char *name = static_cast<char *>(self()->getMemory(nameLength * sizeof(char)));
+   strncpy(name, symbolName, nameLength);
+   _symbols.push_back(CodeCacheSymbol{name, static_cast<uint32_t>(nameLength), 0, 0});
+   _totalELFSymbolNamesLength += nameLength;
+   uint32_t symbolNumber = static_cast<uint32_t>(_symbols.size() - 1);
+   uint32_t relocationType = R_X86_64_64;
+   _relocations.push_back(CodeCacheRelocation{relocation.location(), relocationType, symbolNumber});
+#endif // HOST_OS == OMR_LINUX
    }

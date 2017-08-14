@@ -31,27 +31,12 @@
 
 
 TR::CodeCacheManager *TestCompiler::CodeCacheManager::_codeCacheManager = NULL;
-TestCompiler::JitConfig *TestCompiler::CodeCacheManager::_jitConfig = NULL;
 
 
 TR::CodeCacheManager *
 TestCompiler::CodeCacheManager::self()
    {
    return static_cast<TR::CodeCacheManager *>(this);
-   }
-
-TestCompiler::FrontEnd *
-TestCompiler::CodeCacheManager::pyfe()
-   {
-   return reinterpret_cast<FrontEnd *>(self()->fe());
-   }
-
-TR::CodeCache *
-TestCompiler::CodeCacheManager::initialize(bool useConsolidatedCache, uint32_t numberOfCodeCachesToCreateAtStartup)
-   {
-   _jitConfig = self()->pyfe()->jitConfig();
-   //_allocator = TR::globalAllocator("CodeCache");
-   return self()->OMR::CodeCacheManager::initialize(useConsolidatedCache, numberOfCodeCachesToCreateAtStartup);
    }
 
 void *

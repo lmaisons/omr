@@ -21,7 +21,7 @@
 #include "env/ConcreteFE.hpp"
 
 TR::JitConfig::JitConfig()
-   : _processorInfo(0), _codeCacheFull(false), _interpreterTOC(0), _pseudoTOC(0)
+   : _processorInfo(0), _interpreterTOC(0), _pseudoTOC(0)
    {
    memcpy(_eyecatcher, "JITCONF" /* 7 bytes + null */, sizeof(this->_eyecatcher));
    }
